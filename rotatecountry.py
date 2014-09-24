@@ -9,9 +9,9 @@ import numpy as np
 import global_demo_model
 from vectorrotation import *
 
-model = global_demo_model.GlobalDemoModel.from_pickle('../../Models/model2010.gdm')
+model = global_demo_model.GlobalDemoModel.\
+    from_pickle('../../Models/model2010.gdm')
 
-# Perform the analysis for this country
 __debugmode__ = False
 __theta__ = np.deg2rad(1) # 1 degree in radians
 
@@ -37,10 +37,15 @@ def reference_vector(country):
     except AttributeError:
         vec = model.countries[country].f
     return vec
+
+def set_reference_vector(country, v):
+    ref_vector = reference_vector(country)
+    for k in ref_vector.keys():
+        ref_vector[k] = v[k]
     
 def min_angle(countries, base_country):
     """
-    Find the smallest angle, in degrees, of the vector 
+    Find the smallest angle, in radians, of the vector 
     given by `reference_vector()`
     between each element of countries and base_country.
     
@@ -54,17 +59,16 @@ def min_angle(countries, base_country):
     Returns
     -------
     float
-        Angle in degrees
+        Angle in radians
     """
     angles = pd.DataFrame([[c,
         angle_between(reference_vector(countries[c]), 
                       reference_vector(base_country))]
                       for c in countries if c != base_country])
     angles.columns = ['country', 'angle']
-    angles['degrees'] = angles.angle.apply(np.rad2deg)
     return angles.angle.min()
     
-def rotate_country(model, from_country, to_country, angle):
+def rotate_country(from_country, to_country, angle):
     """
     Rotate the reference vector of `from_country` towards
     that of `to_country` by `angle` radians
@@ -75,7 +79,7 @@ def rotate_country(model, from_country, to_country, angle):
     for k in u.keys():
         u[k] = w[k]
 
-def run_experiment(model, base_country):
+def rotation_experiment(model, base_country):
     print "Running experiment for %s" % base_country
     if min_angle(model.countries, base_country) < __theta__:
         theta = min_angle(model.countries, base_country)
@@ -89,28 +93,33 @@ def run_experiment(model, base_country):
     except:
         pass
     baseline_metric = country_metric(base_country)
+    baseline_vector = reference_vector(base_country).copy()
     print "Baseline metric: %i" % baseline_metric
     results = []
     for cname in __country_names__:
         if cname != base_country.name:
-            c = model.countries[cname]
-            Zold = base_country.Z().copy()
-            xold = base_country.x.copy()
-            rotate_country(model, base_country, c, theta)
+            other_country = model.countries[cname]
+            # Rotate towards other_country by angle theta
+            rotate_country(base_country, other_country, theta)
             model.recalculate_world()
-            Znew = base_country.Z()
-            xnew = base_country.x
             metric = country_metric(base_country)
             print "Country: %s, metric: %i" % (cname, metric)
             results.append({'base_country':base_country.name,
                             'country':cname,
                             'x_total':base_country.x.sum(),
                             'f_total':base_country.f.sum(),
+                            'z_total':base_country.Z().sum().sum(),
                             'metric':metric})
+            # Now rotate back to the starting point.
+            # No need to recalculate world here.
+            set_reference_vector(base_country, baseline_vector)
+    # Leave things as we found them
+    model.recalculate_world()        
     results = pd.DataFrame(results)
     results['delta'] = baseline_metric - results.metric
     return results
 
-results = [run_experiment(model, c) for c in __country_names__]
-results = pd.concat(results)
-results.to_csv('rotation_results.csv', index=False)
+def run_experiment():
+    results = [rotation_experiment(model, c) for c in __country_names__]
+    results = pd.concat(results)
+    results.to_csv('rotation_results.csv', index=False)

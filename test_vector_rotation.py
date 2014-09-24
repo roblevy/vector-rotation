@@ -85,6 +85,19 @@ class VectorRotation(unittest.TestCase):
         x_dash = vector_rotate(x, y, 0)
         self.assertTrue(np.allclose(x, x_dash))
         self.assertTrue(_vectors_are_colinear(x, x_dash))
+
+    def test_rotate_and_go_back(self):
+        """
+        If you rotate x toward y and back toward x by the
+        same angle, you should end up with exactly x
+        """
+        x = pd.Series(np.random.rand(35) * 1e6)
+        y = pd.Series(np.random.rand(35))
+        alpha = np.deg2rad(1)
+        x_dash = vector_rotate(x, y, alpha)
+        x_dash_dash = vector_rotate(x_dash, x, alpha)
+        self.assertTrue(np.allclose(x, x_dash_dash))
+        
         
 def _vectors_are_colinear(x, y):
     """
